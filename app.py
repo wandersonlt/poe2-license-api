@@ -4,6 +4,8 @@ import sqlite3
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import pytz
+from datetime import datetime, timedelta, timezone
 
 app = Flask(__name__)
 CORS(app)
@@ -88,6 +90,7 @@ def validate_license():
         original_expires = datetime.fromisoformat(expires_at_str)
         days_valid = (original_expires - created_date).days
         
+        # Contagem a partir de AGORA
         new_expires_at = datetime.now() + timedelta(days=days_valid)
         new_expires_at_str = new_expires_at.isoformat()
         
@@ -99,19 +102,59 @@ def validate_license():
         conn.commit()
         conn.close()
         
-        # Calcular horas restantes
+        # Calcular tempo restante (dias e horas)
         total_seconds = (new_expires_at - datetime.now()).total_seconds()
-        hours_left = int(total_seconds // 3600)
-        days_left = hours_left // 24
-        remaining_hours = hours_left % 24
+        days = int(total_seconds // 86400)
+        hours = int((total_seconds % 86400) // 3600)
+        
+        if days == 0:
+            message = f'License activated! {hours}h left'
+        else:
+            message = f'License activated! {days}d {hours}h left'
         
         return jsonify({
             'valid': True, 
-            'message': f'License activated! {days_left}d {remaining_hours}h left', 
-            'days_left': days_left,
-            'hours_left': remaining_hours,
+            'message': message,
+            'days_left': days,
+            'hours_left': hours,
             'expires_at': new_expires_at_str
         })
+    
+    # Verificações para licenças já vinculadas
+    if stored_machine != machine_id:
+        conn.close()
+        return jsonify({'valid': False, 'message': 'License not for this computer'})
+    
+    if not is_active:
+        conn.close()
+        return jsonify({'valid': False, 'message': 'License revoked'})
+    
+    expires_at = datetime.fromisoformat(expires_at_str)
+    if expires_at < datetime.now():
+        conn.close()
+        return jsonify({'valid': False, 'message': 'License expired'})
+    
+    cursor.execute("UPDATE licenses SET last_used = ? WHERE license_key = ?", (datetime.now().isoformat(), license_key))
+    conn.commit()
+    conn.close()
+    
+    # Calcular tempo restante (dias e horas)
+    total_seconds = (expires_at - datetime.now()).total_seconds()
+    days = int(total_seconds // 86400)
+    hours = int((total_seconds % 86400) // 3600)
+    
+    if days == 0:
+        message = f'Valid license. {hours}h left'
+    else:
+        message = f'Valid license. {days}d {hours}h left'
+    
+    return jsonify({
+        'valid': True, 
+        'message': message,
+        'days_left': days,
+        'hours_left': hours,
+        'expires_at': expires_at_str
+    })
     
     # Verificações para licenças já vinculadas
     if stored_machine != machine_id:
