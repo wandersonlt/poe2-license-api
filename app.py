@@ -1,10 +1,9 @@
-# app.py - API de Licenciamento
+# app.py - API de Licenciamento (versão estável)
 import secrets
 import sqlite3
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from datetime import datetime, timedelta, timezone
 
 app = Flask(__name__)
 CORS(app)
@@ -89,7 +88,6 @@ def validate_license():
         original_expires = datetime.fromisoformat(expires_at_str)
         days_valid = (original_expires - created_date).days
         
-        # Contagem a partir de AGORA
         new_expires_at = datetime.now() + timedelta(days=days_valid)
         new_expires_at_str = new_expires_at.isoformat()
         
@@ -101,8 +99,8 @@ def validate_license():
         conn.commit()
         conn.close()
         
-        # Calcular tempo restante (dias e horas)
-        delta = expires_at - datetime.now()
+        # Calcular tempo restante
+        delta = new_expires_at - datetime.now()
         days = delta.days
         hours = delta.seconds // 3600
         
@@ -112,7 +110,7 @@ def validate_license():
             message = f'License activated! {days}d {hours}h left'
         
         return jsonify({
-            'valid': True, 
+            'valid': True,
             'message': message,
             'days_left': days,
             'hours_left': hours,
@@ -137,10 +135,10 @@ def validate_license():
     conn.commit()
     conn.close()
     
-    # Calcular tempo restante (dias e horas)
-    total_seconds = (expires_at - datetime.now()).total_seconds()
-    days = int(total_seconds // 86400)
-    hours = int((total_seconds % 86400) // 3600)
+    # Calcular tempo restante
+    delta = expires_at - datetime.now()
+    days = delta.days
+    hours = delta.seconds // 3600
     
     if days == 0:
         message = f'Valid license. {hours}h left'
@@ -148,42 +146,10 @@ def validate_license():
         message = f'Valid license. {days}d {hours}h left'
     
     return jsonify({
-        'valid': True, 
+        'valid': True,
         'message': message,
         'days_left': days,
         'hours_left': hours,
-        'expires_at': expires_at_str
-    })
-    
-    # Verificações para licenças já vinculadas
-    if stored_machine != machine_id:
-        conn.close()
-        return jsonify({'valid': False, 'message': 'License not for this computer'})
-    
-    if not is_active:
-        conn.close()
-        return jsonify({'valid': False, 'message': 'License revoked'})
-    
-    expires_at = datetime.fromisoformat(expires_at_str)
-    if expires_at < datetime.now():
-        conn.close()
-        return jsonify({'valid': False, 'message': 'License expired'})
-    
-    cursor.execute("UPDATE licenses SET last_used = ? WHERE license_key = ?", (datetime.now().isoformat(), license_key))
-    conn.commit()
-    conn.close()
-    
-    # Calcular horas restantes
-    total_seconds = (expires_at - datetime.now()).total_seconds()
-    hours_left = int(total_seconds // 3600)
-    days_left = hours_left // 24
-    remaining_hours = hours_left % 24
-    
-    return jsonify({
-        'valid': True, 
-        'message': f'Valid license. {days_left}d {remaining_hours}h left', 
-        'days_left': days_left,
-        'hours_left': remaining_hours,
         'expires_at': expires_at_str
     })
 
@@ -207,7 +173,6 @@ def revoke_license():
 
 @app.route('/api/reactivate', methods=['POST'])
 def reactivate_license():
-    """Reativa uma licença expirada com novos dias"""
     data = request.json
     if data.get('admin_key') != ADMIN_KEY:
         return jsonify({'error': 'Unauthorized'}), 401
@@ -226,7 +191,6 @@ def reactivate_license():
         conn.close()
         return jsonify({'error': 'License not found'}), 404
     
-    # Nova expiração com +1 dia para contar o dia atual
     new_expires_at = (datetime.now() + timedelta(days=days_valid)).isoformat()
     
     cursor.execute("""
@@ -238,7 +202,7 @@ def reactivate_license():
     conn.close()
     
     return jsonify({
-        'success': True, 
+        'success': True,
         'message': f'License reactivated for {days_valid} days',
         'expires_at': new_expires_at,
         'days_valid': days_valid
@@ -246,7 +210,6 @@ def reactivate_license():
 
 @app.route('/api/delete-license', methods=['POST'])
 def delete_license():
-    """Exclui permanentemente uma licença"""
     data = request.json
     if data.get('admin_key') != ADMIN_KEY:
         return jsonify({'error': 'Unauthorized'}), 401
@@ -258,14 +221,10 @@ def delete_license():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM licenses WHERE license_key = ?", (license_key,))
-    affected = cursor.rowcount
     conn.commit()
     conn.close()
     
-    if affected > 0:
-        return jsonify({'success': True, 'message': 'License deleted permanently'})
-    else:
-        return jsonify({'error': 'License not found'}), 404
+    return jsonify({'success': True, 'message': 'License deleted'})
 
 @app.route('/api/list-licenses', methods=['POST'])
 def list_licenses():
