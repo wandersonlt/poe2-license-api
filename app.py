@@ -1,4 +1,4 @@
-# app.py - API de Licenciamento (versão final sem fuso horário)
+# app.py - API de Licenciamento (versão com dias exatos)
 import secrets
 import sqlite3
 from datetime import datetime, timedelta
@@ -48,17 +48,20 @@ def generate_license():
     
     days_valid = data.get('days_valid', 30)
     license_key = secrets.token_hex(16).upper()
-    # A data de expiração é calculada a partir de AGORA
-    expires_at = (datetime.now() + timedelta(days=days_valid)).isoformat()
+    
+    # Usar data UTC sem horas
+    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    expires_at = now + timedelta(days=days_valid)
+    expires_at_str = expires_at.isoformat()
     
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("INSERT INTO licenses (license_key, machine_id, expires_at) VALUES (?, ?, ?)",
-                   (license_key, '', expires_at))
+                   (license_key, '', expires_at_str))
     conn.commit()
     conn.close()
     
-    return jsonify({'success': True, 'license_key': license_key, 'expires_at': expires_at})
+    return jsonify({'success': True, 'license_key': license_key, 'expires_at': expires_at_str})
 
 @app.route('/api/validate', methods=['POST'])
 def validate_license():
@@ -89,8 +92,9 @@ def validate_license():
         original_expires = datetime.fromisoformat(expires_at_str)
         days_valid = (original_expires - created_date).days
         
-        # A contagem começa a partir de AGORA
-        new_expires_at = datetime.now() + timedelta(days=days_valid)
+        # Nova expiração a partir de AGORA (zerando as horas)
+        now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        new_expires_at = now + timedelta(days=days_valid)
         new_expires_at_str = new_expires_at.isoformat()
         
         cursor.execute("""
@@ -101,22 +105,11 @@ def validate_license():
         conn.commit()
         conn.close()
         
-        # Calcular tempo restante para mensagem
-        delta = new_expires_at - datetime.now()
-        days = delta.days
-        hours = delta.seconds // 3600
-        minutes = (delta.seconds % 3600) // 60
-        
-        if days == 0:
-            message = f'License activated! {hours}h {minutes}m left'
-        else:
-            message = f'License activated! {days}d {hours}h left'
-        
+        days_left = days_valid
         return jsonify({
             'valid': True,
-            'message': message,
-            'days_left': days,
-            'hours_left': hours,
+            'message': f'License activated! {days_left} days left',
+            'days_left': days_left,
             'expires_at': new_expires_at_str
         })
     
@@ -130,7 +123,9 @@ def validate_license():
         return jsonify({'valid': False, 'message': 'License revoked'})
     
     expires_at = datetime.fromisoformat(expires_at_str)
-    if expires_at < datetime.now():
+    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    if expires_at < now:
         conn.close()
         return jsonify({'valid': False, 'message': 'License expired'})
     
@@ -138,22 +133,12 @@ def validate_license():
     conn.commit()
     conn.close()
     
-    # Calcular tempo restante para mensagem
-    delta = expires_at - datetime.now()
-    days = delta.days
-    hours = delta.seconds // 3600
-    minutes = (delta.seconds % 3600) // 60
-    
-    if days == 0:
-        message = f'Valid license. {hours}h {minutes}m left'
-    else:
-        message = f'Valid license. {days}d {hours}h left'
+    days_left = (expires_at - now).days
     
     return jsonify({
         'valid': True,
-        'message': message,
-        'days_left': days,
-        'hours_left': hours,
+        'message': f'Valid license. {days_left} days left',
+        'days_left': days_left,
         'expires_at': expires_at_str
     })
 
@@ -195,20 +180,22 @@ def reactivate_license():
         conn.close()
         return jsonify({'error': 'License not found'}), 404
     
-    new_expires_at = (datetime.now() + timedelta(days=days_valid)).isoformat()
+    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    new_expires_at = now + timedelta(days=days_valid)
+    new_expires_at_str = new_expires_at.isoformat()
     
     cursor.execute("""
         UPDATE licenses 
         SET expires_at = ?, is_active = 1, last_used = ? 
         WHERE license_key = ?
-    """, (new_expires_at, datetime.now().isoformat(), license_key))
+    """, (new_expires_at_str, datetime.now().isoformat(), license_key))
     conn.commit()
     conn.close()
     
     return jsonify({
         'success': True,
         'message': f'License reactivated for {days_valid} days',
-        'expires_at': new_expires_at,
+        'expires_at': new_expires_at_str,
         'days_valid': days_valid
     })
 
