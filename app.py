@@ -1,4 +1,4 @@
-# app.py - API de Licenciamento (versão estável)
+# app.py - API de Licenciamento (versão final sem fuso horário)
 import secrets
 import sqlite3
 from datetime import datetime, timedelta
@@ -48,6 +48,7 @@ def generate_license():
     
     days_valid = data.get('days_valid', 30)
     license_key = secrets.token_hex(16).upper()
+    # A data de expiração é calculada a partir de AGORA
     expires_at = (datetime.now() + timedelta(days=days_valid)).isoformat()
     
     conn = get_db()
@@ -88,6 +89,7 @@ def validate_license():
         original_expires = datetime.fromisoformat(expires_at_str)
         days_valid = (original_expires - created_date).days
         
+        # A contagem começa a partir de AGORA
         new_expires_at = datetime.now() + timedelta(days=days_valid)
         new_expires_at_str = new_expires_at.isoformat()
         
@@ -99,13 +101,14 @@ def validate_license():
         conn.commit()
         conn.close()
         
-        # Calcular tempo restante
+        # Calcular tempo restante para mensagem
         delta = new_expires_at - datetime.now()
         days = delta.days
         hours = delta.seconds // 3600
+        minutes = (delta.seconds % 3600) // 60
         
         if days == 0:
-            message = f'License activated! {hours}h left'
+            message = f'License activated! {hours}h {minutes}m left'
         else:
             message = f'License activated! {days}d {hours}h left'
         
@@ -135,13 +138,14 @@ def validate_license():
     conn.commit()
     conn.close()
     
-    # Calcular tempo restante
+    # Calcular tempo restante para mensagem
     delta = expires_at - datetime.now()
     days = delta.days
     hours = delta.seconds // 3600
+    minutes = (delta.seconds % 3600) // 60
     
     if days == 0:
-        message = f'Valid license. {hours}h left'
+        message = f'Valid license. {hours}h {minutes}m left'
     else:
         message = f'Valid license. {days}d {hours}h left'
     
