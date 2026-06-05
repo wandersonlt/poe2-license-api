@@ -4,7 +4,6 @@ import sqlite3
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import pytz
 from datetime import datetime, timedelta, timezone
 
 app = Flask(__name__)
