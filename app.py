@@ -102,9 +102,9 @@ def validate_license():
         conn.close()
         
         # Calcular tempo restante (dias e horas)
-        total_seconds = (new_expires_at - datetime.now()).total_seconds()
-        days = int(total_seconds // 86400)
-        hours = int((total_seconds % 86400) // 3600)
+        delta = expires_at - datetime.now()
+        days = delta.days
+        hours = delta.seconds // 3600
         
         if days == 0:
             message = f'License activated! {hours}h left'
