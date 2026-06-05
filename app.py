@@ -86,7 +86,7 @@ def validate_license():
     if stored_machine == '':
         created_date = datetime.fromisoformat(created_at)
         original_expires = datetime.fromisoformat(expires_at_str)
-        days_valid = (original_expires - created_date).days + 1  # +1 para incluir o dia atual
+        days_valid = (original_expires - created_date).days
         
         new_expires_at = datetime.now() + timedelta(days=days_valid)
         new_expires_at_str = new_expires_at.isoformat()
@@ -99,11 +99,17 @@ def validate_license():
         conn.commit()
         conn.close()
         
-        days_left = days_valid
+        # Calcular horas restantes
+        total_seconds = (new_expires_at - datetime.now()).total_seconds()
+        hours_left = int(total_seconds // 3600)
+        days_left = hours_left // 24
+        remaining_hours = hours_left % 24
+        
         return jsonify({
             'valid': True, 
-            'message': f'License activated! {days_left} days left', 
+            'message': f'License activated! {days_left}d {remaining_hours}h left', 
             'days_left': days_left,
+            'hours_left': remaining_hours,
             'expires_at': new_expires_at_str
         })
     
@@ -125,15 +131,17 @@ def validate_license():
     conn.commit()
     conn.close()
     
-    # Calcular dias restantes (incluindo o dia atual)
-    days_left = (expires_at - datetime.now()).days
-    if days_left < 0:
-        days_left = 0
+    # Calcular horas restantes
+    total_seconds = (expires_at - datetime.now()).total_seconds()
+    hours_left = int(total_seconds // 3600)
+    days_left = hours_left // 24
+    remaining_hours = hours_left % 24
     
     return jsonify({
         'valid': True, 
-        'message': f'Valid license. {days_left} days left', 
+        'message': f'Valid license. {days_left}d {remaining_hours}h left', 
         'days_left': days_left,
+        'hours_left': remaining_hours,
         'expires_at': expires_at_str
     })
 
